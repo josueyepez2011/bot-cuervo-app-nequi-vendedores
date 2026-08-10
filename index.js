@@ -157,7 +157,8 @@ async function notifySale(seller, plan, customerPhone, customerPin, months) {
     `📎 <b>@:</b> @${seller.username || 'N/A'}\n\n` +
     `📦 <b>Paquete:</b> ${planInfo.emoji} ${planInfo.name}\n` +
     `🔢 <b>Monto:</b> ${planInfo.amount}\n` +
-    `📅 <b>Meses:</b> ${months}\n\n` +
+    (plan === 'basico' ? '' : `📅 <b>Meses:</b> ${months}\n`) +
+    `\n` +
     `📱 <b>Teléfono cliente:</b> <code>${customerPhone}</code>\n` +
     `🔐 <b>PIN:</b> <code>${customerPin}</code>\n\n` +
     `💰 <b>Cobrado:</b> ${formatCOP(planInfo.price)}\n` +
@@ -776,9 +777,29 @@ bot.on('text', async (ctx) => {
         return ctx.reply('⚠️ PIN inválido. Debe tener al menos 4 dígitos:');
       }
       state.customerPin = pin;
-      state.step = 'awaiting_months';
-      userStates.set(tgId, state);
-      return ctx.reply('📅 ¿Cuántos *meses* del plan? (1-12):', { parse_mode: 'Markdown' });
+      
+      if (state.plan === 'basico') {
+        state.months = '';
+        state.step = 'confirm_sale';
+        userStates.set(tgId, state);
+        
+        const planInfo = PLANS[state.plan];
+        
+        return ctx.reply(
+          `📋 *CONFIRMAR VENTA*\n\n` +
+          `📦 *Plan:* ${planInfo.emoji} ${planInfo.name}\n` +
+          `🔢 *Monto:* ${planInfo.amount}\n` +
+          `📱 *Teléfono:* \`${state.customerPhone}\`\n` +
+          `🔐 *PIN:* \`${state.customerPin}\`\n\n` +
+          `💰 *Cobrar:* ${formatCOP(planInfo.price)}\n` +
+          `💸 *Tu comisión:* ${formatCOP(planInfo.commission)}`,
+          { parse_mode: 'Markdown', ...confirmKeyboard() }
+        );
+      } else {
+        state.step = 'awaiting_months';
+        userStates.set(tgId, state);
+        return ctx.reply('📅 ¿Cuántos *meses* del plan? (1-12):', { parse_mode: 'Markdown' });
+      }
     }
 
     if (state.step === 'awaiting_months') {
@@ -865,16 +886,22 @@ bot.action('confirm_sale', async (ctx) => {
     });
 
     // Crear/actualizar usuario en colección users
-    const expirationDate = new Date();
-    expirationDate.setTime(expirationDate.getTime() + (30 * 24 * 60 * 60 * 1000 * months));
+    let premiumExpiry = "";
+    let vencimiento = "";
+    if (planKey !== 'basico') {
+      const expirationDate = new Date();
+      expirationDate.setTime(expirationDate.getTime() + (30 * 24 * 60 * 60 * 1000 * months));
+      premiumExpiry = expirationDate.getTime();
+      vencimiento = expirationDate.toISOString();
+    }
 
     await db.collection('users').doc(state.customerPhone).set({
       planVip: planInfo.planName,
-      premiumExpiry: expirationDate.getTime(),
+      premiumExpiry: premiumExpiry,
       balance: planInfo.balance,
       pin: state.customerPin,
-      premium: planInfo.planName !== '',
-      vencimiento: expirationDate.toISOString(),
+      premium: planKey === 'basico' ? false : (planInfo.planName !== ''),
+      vencimiento: vencimiento,
       createdBy: seller.name,
       updatedAt: FieldValue.serverTimestamp(),
       banned: false,
