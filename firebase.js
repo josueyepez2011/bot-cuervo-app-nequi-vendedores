@@ -7,8 +7,15 @@ const serviceAccountPath = path.join(
   'nequi-colombia-194a1-firebase-adminsdk-fbsvc-c0ec15ef2c.json'
 );
 
+let credentialOptions;
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  credentialOptions = cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT));
+} else {
+  credentialOptions = cert(serviceAccountPath);
+}
+
 initializeApp({
-  credential: cert(serviceAccountPath),
+  credential: credentialOptions,
 });
 
 const db = getFirestore();
